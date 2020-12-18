@@ -35,19 +35,21 @@ class JSConfigureView(ConfigureDelegate):
         varmap = {}
         for index, line in enumerate(lines):
             if index == 0:
-                varmap['startrow'] = line.strip()
-            elif index == 1:
-                varmap['endrow'] = line.strip()
-            elif index == 2:
-                varmap['keywords'] = line.strip().split(',')
-            else:
+                # 最终合表结果存放路径
                 varmap['storepath'] = line.strip()
+            elif index == 1:
+                # 抽取文件的路径
+                varmap['filespath'] = line.strip()
+            elif index == 2:
+                # 读取 heads 的路径
+                varmap['headspath'] = line.strip()
+            else:
+                # 抽取文件的路径
+                varmap['keywords'] = line.strip().split(',')
+
         f.close()
         return varmap
 
-if __name__ == '__main__':
-    view = JSConfigureView("/Users/sun/Desktop/Development/Python_Demos/AutoETL/test.txt")
-    view.readConfigureFile()
 
 
 

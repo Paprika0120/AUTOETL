@@ -12,14 +12,16 @@
 
 class JSConfigureModel:
 
+    hello = []
+
     def __init__(self, vars):
         # 关键字
         self.keywords = vars['keywords']
-        # 表头起始行
-        self.startrow = vars['startrow']
-        # 表头起始列
-        self.endrow = vars['endrow']
-        # 合表后存放的路径
+        # 合表后存放结果的路径
         self.storepath = vars['storepath']
+        # 抽取数据文件路径
+        self.filepath = vars['filespath']
+        # head 的存放路径
+        self.headspath = vars['headspath']
         # 是否启用配置文件
         # self.configureAvailable = configureAvailable
