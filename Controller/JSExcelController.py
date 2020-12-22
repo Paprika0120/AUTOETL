@@ -87,7 +87,7 @@ class JSExcelController(object):
         if (endRow > rSheet.nrows):
             endRow = rSheet.nrows
 
-        # start = datetime.datetime.now()
+
         head = ''
         for row in range(startRow, endRow):
             # 拼接表头

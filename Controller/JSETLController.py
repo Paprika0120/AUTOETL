@@ -43,6 +43,32 @@ class JSETLController(ConfigureDelegate):
         excelhandler.getPathFromRootFolder()
         print("开始搜索表头")
 
+    # 根据 merge cell 定位多范式表格的位置, 以最小range 作为标准, 如果没有 merge cell 则默认第一行为表头
+    def findMinMergeCellRange(self, rSheet):
+        # 表格的列边界
+        ecol = rSheet.ncols
+        # 获取到 merged cell 的信息
+        # [(0, 3, 0, 1), (0, 1, 1, 5)]
+        # 前两位 代表行的合并范围,后两位代表列的合并范围
+        # (3 - 0) x (1 - 0) 的一个合并单元格
+        # (1 - 0) x (5 - 1) 的一个合并单元格
+        mergedCells = rSheet.merged_cells
+        mergeCellCount = len(mergedCells)
+        # 没有 mergeCell 的情况, 默认第一行为表头
+        if mergeCellCount == 0:
+            for colindex in range(0, ecol):
+                value = rSheet.cell_value(0, colindex)
+                print(value)
+        else:
+            # 这里是如果是 merge cell 的情况, 有可能 mergecell 范围 > 3 的时候为标题的情况, 所以也要筛除这种情况
+            for index, cell in enumerate(mergedCells):
+                # 获取到 merge cell 的范围 选取到 merger cell 的最小粒度
+                # r - row, c - col
+                rlow, rhign, clow, chigh = cell
+                print(rlow, rhign, clow, chigh)
+
+        print('---------------------')
+
     # 读取数据表格进行比对后做合并操作 -- 根据表头进行比对来抽取数据
     def ReadDataThenCompareAndExtract(self, configuremodel):
         # 存放表头的路径
@@ -53,7 +79,6 @@ class JSETLController(ConfigureDelegate):
         headsmaplist = self.readStandardHeadFromFolder(configuremodel)
         for path in datafilelist:
             for df in headsmaplist.values():
-                print('hello')
                 # 获取模板表头的行数,用于数据表中获取表头范围
                 totalrows = len(df.index)
                 # 根据标准表头获取数据里的表头进行比对
@@ -81,18 +106,27 @@ class JSETLController(ConfigureDelegate):
 
 
 if __name__ == '__main__':
-    # 配置文件路径
-    path = os.path.abspath('..') + "/configureFile.txt"  # 表示当前所处的文件夹上一级文件夹的绝对路径
+    # # 配置文件路径
+    # path = os.path.abspath('..') + "/configureFile.txt"  # 表示当前所处的文件夹上一级文件夹的绝对路径
+    # controller = JSETLController()
+    #
+    # View = JSConfigureView(path)
+    # # view 层读取配置文件
+    # View.readConfigureFile()
+    #
+    # # Controller 调度执行读取模板表头文件 | 根据数据文件自动识别表头
+    # controller = JSETLController()
+    # # 根据标准表头进行比对和抽取合并数据
+    # controller.ReadDataThenCompareAndExtract(View.configuremodel)
+    path = '/Users/sun/Desktop/test/'
+    list = JSExcelHandler.getPathFromRootFolder(path)
     controller = JSETLController()
 
-    View = JSConfigureView(path)
-    # view 层读取配置文件
-    View.readConfigureFile()
-
-    # Controller 调度执行读取模板表头文件 | 根据数据文件自动识别表头
-    controller = JSETLController()
-    # 根据标准表头进行比对和抽取合并数据
-    controller.ReadDataThenCompareAndExtract(View.configuremodel)
+    for path in list:
+        readOpenXls, sheetnames, workpath = JSExcelHandler.OpenXls(path)
+        for sheetname in sheetnames:
+            rSheet = readOpenXls.sheet_by_name(sheetname)
+            controller.findMinMergeCellRange(rSheet)
 
 
 

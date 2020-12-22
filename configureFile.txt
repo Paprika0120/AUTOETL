@@ -1,6 +1,6 @@
-/Users/sun/Desktop/result/
-/Users/sun/Desktop/data/
-/Users/sun/Desktop/heads/
+/Users/sun/Desktop/AUTOEtlTest/result/
+/Users/sun/Desktop/AUTOEtlTest/data/
+/Users/sun/Desktop/AUTOEtlTest/heads/
 年份,单位
 
 

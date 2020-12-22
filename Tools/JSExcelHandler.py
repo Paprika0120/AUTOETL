@@ -53,11 +53,6 @@ class JSExcelHandler(object):
         # 返回 sheets 对象, 名字, 绝对路径
         return readOpenXlsx, sheetnames, tempPath
 
-    # 保存文件
-    # @classmethod
-    # def saveWithName(cls):
-    #     cls.writeOpenXlsx.save()
-
     # 新建 sheet 并保存, 标题按传入的参数数组依次写入
     @classmethod
     def addSheet(cls, titleArgs):
