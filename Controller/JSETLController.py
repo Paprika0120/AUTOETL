@@ -17,28 +17,24 @@ from Delegate.ConfigureDelegate import ConfigureDelegate
 from View.JSConfigureView import JSConfigureView
 from Tools.JSExcelHandler import JSExcelHandler
 import pandas as pd
-import numpy as np
 
 
 class JSETLController(ConfigureDelegate):
 
-    def __init__(self, configurefile):
-        self.configureV = JSConfigureView(configurefile)
-        self.configureV.readConfigureFile()
+    # def __init__(self, configurefile):
+    #
+    #     self.configureV = JSConfigureView(configurefile)
+    #     self.configureV.readConfigureFile()
 
-    # 可以增加 model 的属性
-    # def readConfigureFile(self, filepath):
-    #     model = self.configureV.reloadView()
-    #     return model
-    def handleSheetHead(self, configuremodel):
-        # 启用配置文件的情况
-        if self.configureM.configureAvailable == 'M':
-            self.extractSheetHeadWithConfigureFile(configuremodel, configuremodel)
-        # 自动搜寻表头
-        else:
-            self.autoExtractSheetHead(configuremodel)
+    # def handleSheetHead(self, configuremodel):
+    #     # 启用配置文件的情况
+    #     if self.configureM.configureAvailable == 'M':
+    #         self.extractSheetHeadWithConfigureFile(configuremodel, configuremodel)
+    #     # 自动搜寻表头
+    #     else:
+    #         self.autoExtractSheetHead(configuremodel)
 
-    # 自动搜索表头的位置
+    # 自动根据数据提取表头 -- 延后做 TODO
     def autoExtractSheetHead(self, configuremodel):
         storepath = configuremodel.storepath
         # 所有需要合并的表格数据
@@ -47,40 +43,57 @@ class JSETLController(ConfigureDelegate):
         excelhandler.getPathFromRootFolder()
         print("开始搜索表头")
 
-    # 根据配置文件抽取表头 -- 根据表头进行比对来抽取数据
-    def readHeadsThenCompareAndStore(self, configuremodel):
+    # 读取数据表格进行比对后做合并操作 -- 根据表头进行比对来抽取数据
+    def ReadDataThenCompareAndExtract(self, configuremodel):
         # 存放表头的路径
-        headspath = configuremodel.headspath
-        # 搜索所有 标准 heads 的 excel 文件
-        headslist = JSExcelHandler.getPathFromRootFolder(headspath)
-        headmaps = []
-        for headpath in headslist:
-            readOpenXls, sheetnames, workpath = JSExcelHandler.OpenXls(headpath)
-            for name in sheetnames:
-                # 按 sheet name 获取 workbook 中的 sheet
-                rSheet = readOpenXls.sheet_by_name(name)
-                map = {}
-                # 之前已经有 map 要进行比对是否是同一个
-                if len(headmaps) > 0:
-                    print('hello world')
-                else:
-                    # 表头的列数
-                    map['colnumber'] = rSheet.ncols
-                    headmaps.append(map)
+        datapath = configuremodel.datapath
+        # 读取所有数据文件
+        datafilelist = JSExcelHandler.getPathFromRootFolder(datapath)
+        # 类型是 map
+        headsmaplist = self.readStandardHeadFromFolder(configuremodel)
+        for path in datafilelist:
+            for df in headsmaplist.values():
+                print('hello')
+                # 获取模板表头的行数,用于数据表中获取表头范围
+                totalrows = len(df.index)
+                # 根据标准表头获取数据里的表头进行比对
+                datadf = pd.read_excel(path, nrows=totalrows)
+                if datadf.equals(df):
+                    print('is the same')
 
-        # 根据路径读取后,存为 [map1, map2, map3]形式
-        excelHandler = JSExcelController()
-        excelHandler.getPathFromRootFolder()
+    # 获取标准的表头的文件,建立标准表头格式的 maplist
+    def readStandardHeadFromFolder(self, configuremodel):
+        headspath = configuremodel.headspath
+        excellist = JSExcelHandler.getPathFromRootFolder(headspath)
+        dfmaplist = {}
+        # 从标准头路径中读取标准表头的格式,为比对做准备
+        for index, excelpath in enumerate(excellist):
+            newdf = pd.read_excel(str(excelpath))
+            # '/Users/sun/Desktop/heads/head3.xlsx'
+            if len(dfmaplist) > 0:
+                for olddf in dfmaplist.values():
+                    if newdf.equals(olddf) is True:
+                        break
+            else:
+                # 以路径来作为唯一标识,因为路径是唯一的
+                dfmaplist[excelpath] = newdf
+        return dfmaplist
+
 
 if __name__ == '__main__':
-    # path = os.path.abspath('..') + "/test.txt"  # 表示当前所处的文件夹上一级文件夹的绝对路径
-    # controller = JSETLController(path)
-    pathtest = '/Users/sun/Desktop/test'
-    excellist = JSExcelHandler.getPathFromRootFolder(pathtest)
+    # 配置文件路径
+    path = os.path.abspath('..') + "/configureFile.txt"  # 表示当前所处的文件夹上一级文件夹的绝对路径
+    controller = JSETLController()
 
-    df1 = pd.read_excel(excellist[0])
-    df2 = pd.read_excel(excellist[1])
-    print(df1)
-    print(df2)
+    View = JSConfigureView(path)
+    # view 层读取配置文件
+    View.readConfigureFile()
+
+    # Controller 调度执行读取模板表头文件 | 根据数据文件自动识别表头
+    controller = JSETLController()
+    # 根据标准表头进行比对和抽取合并数据
+    controller.ReadDataThenCompareAndExtract(View.configuremodel)
+
+
 
 

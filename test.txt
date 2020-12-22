@@ -1,4 +1,0 @@
-/Users/sun/Desktop/Development/Python_Demos/AutoETL/
-/Users/sun/Desktop/Development/Python_Demos/AutoETL/
-/Users/sun/Desktop/Development/Python_Demos/AutoETL/
-年份,单位

@@ -1,0 +1,19 @@
+/Users/sun/Desktop/result/
+/Users/sun/Desktop/data/
+/Users/sun/Desktop/heads/
+年份,单位
+
+
+
+if index == 0:
+    # 最终合表结果存放路径
+    varmap['storepath'] = line.strip()
+elif index == 1:
+    # 抽取文件的路径
+    varmap['filespath'] = line.strip()
+elif index == 2:
+    # 读取 heads 的路径
+    varmap['headspath'] = line.strip()
+else:
+    # 抽取文件的路径
+    varmap['keywords'] = line.strip().split(',')

@@ -39,7 +39,7 @@ class JSConfigureView(ConfigureDelegate):
                 varmap['storepath'] = line.strip()
             elif index == 1:
                 # 抽取文件的路径
-                varmap['filespath'] = line.strip()
+                varmap['datapath'] = line.strip()
             elif index == 2:
                 # 读取 heads 的路径
                 varmap['headspath'] = line.strip()
