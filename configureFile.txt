@@ -1,7 +1,10 @@
 /Users/sun/Desktop/AUTOEtlTest/result/
 /Users/sun/Desktop/AUTOEtlTest/data/
 /Users/sun/Desktop/AUTOEtlTest/heads/
+2
 年份,单位
+
+
 
 
 

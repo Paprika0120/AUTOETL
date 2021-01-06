@@ -21,5 +21,7 @@ class JSConfigureModel:
         self.datapath = vars['datapath']
         # head 的存放路径
         self.headspath = vars['headspath']
+
+        self.startrow = int(vars['startrow'])
         # 是否启用配置文件
         # self.configureAvailable = configureAvailable

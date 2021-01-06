@@ -10,6 +10,11 @@
 #
 # ========================================
 import os
+
+from openpyxl import load_workbook
+
+import View
+from Model.JSCellModel import JSCellModel
 from Model.JSConfigureModel import JSConfigureModel
 
 from Controller.JSExcelController import JSExcelController
@@ -44,30 +49,137 @@ class JSETLController(ConfigureDelegate):
         print("开始搜索表头")
 
     # 根据 merge cell 定位多范式表格的位置, 以最小range 作为标准, 如果没有 merge cell 则默认第一行为表头
-    def findMinMergeCellRange(self, rSheet):
+    # 应该将叶子节点的数据向根节点拼接,最后降范式的值从根节点层按列 + 1的顺序得出
+    def lowerDimensionOfTitle(self, path, startrow = 0):
+        readOpenXlsx, sheetnames, tempPath = JSExcelHandler().OpenXls(path)
+        rSheet = readOpenXlsx.sheet_by_name(sheetnames[0])
+        valuelist = []
+        lastrow = 0
         # 表格的列边界
         ecol = rSheet.ncols
-        # 获取到 merged cell 的信息
-        # [(0, 3, 0, 1), (0, 1, 1, 5)]
-        # 前两位 代表行的合并范围,后两位代表列的合并范围
-        # (3 - 0) x (1 - 0) 的一个合并单元格
-        # (1 - 0) x (5 - 1) 的一个合并单元格
-        mergedCells = rSheet.merged_cells
+        resultCells = rSheet.merged_cells
+        # mergeCellCount = len(mergedCells)
+        mergedCells = []
+        # TODO 这里要加从第几行开始降范式,默认是从 0 行开始, 默认是从 0 行开始
+        if startrow > 0:
+            for index, cell in enumerate(resultCells):
+                crlow, crhign, cclow, cchigh = cell
+                if crlow >= startrow:
+                    mergedCells.append(cell)
+        else:
+            mergedCells = resultCells
         mergeCellCount = len(mergedCells)
         # 没有 mergeCell 的情况, 默认第一行为表头
         if mergeCellCount == 0:
             for colindex in range(0, ecol):
                 value = rSheet.cell_value(0, colindex)
-                print(value)
+                valuelist.append(value)
+            # print(valuelist)
+            print("判断--" + rSheet.name + "--的合并单元格已结束")
+            # 参数返回：范式标识（False为一范式，True为多范式）、表头值、数据行坐标
+            return valuelist, lastrow
         else:
-            # 这里是如果是 merge cell 的情况, 有可能 mergecell 范围 > 3 的时候为标题的情况, 所以也要筛除这种情况
-            for index, cell in enumerate(mergedCells):
-                # 获取到 merge cell 的范围 选取到 merger cell 的最小粒度
-                # r - row, c - col
-                rlow, rhign, clow, chigh = cell
-                print(rlow, rhign, clow, chigh)
+            # 用于标记表头的最后一行位置
+            levellist = []
+            setlist = set()
+            levelmap = {}
+            # 最终降范式后的值
+            valuelist = []
+            # 这里是如果是 merge cell 的情况, 暂时定 mergecell 范围 > 6 的时候为标题的情况, 所以也要筛除这种情况 TODO
 
-        print('---------------------')
+            # 这里是从上往下遍历的 mergecell,所以 mergecells 中 从左到右 row 依次增加,可以利用这点简化计算
+            for index, cell in enumerate(mergedCells):
+                # 这里要根据 cell 的row 进行分级
+                # 根据 sheet 中合并单元格的属性转换为树的节点
+                Cmodel = self.createCellModelAccordingRange(cell, rSheet)
+                # 去除空值, x 范围一个以上
+                if Cmodel.value is not None and Cmodel.value != '':
+                    levellist.append(Cmodel)
+                    # 为了找出所有的层级
+                    setlist.add(Cmodel.level)
+
+            #最底层的层级
+            lastlevel = max(setlist)
+            minlevel = min(setlist)
+
+            lastrow = lastlevel + 1
+            for value in setlist:
+                levelmap[value] = []
+            for index, cellmodel in enumerate(levellist):
+                levelmap[cellmodel.level].append(cellmodel)
+            print(levelmap)
+
+            # 创建节点树
+            # 伪头结点,方便计算
+            dummy = JSCellModel()
+            dummy.child = levelmap[minlevel]
+            # 按层级遍历,将子节点的 x 轴范围数据父节点 x 轴范围的情况进行连接
+            for curlevel in range(minlevel, lastlevel):
+                currentcells = levelmap[curlevel]
+                for i, curcell in enumerate(currentcells):
+                    crlow, crhign, cclow, cchigh = curcell.cellrange
+                    nextlevel = curlevel + 1
+                    nextlevelcells = levelmap[nextlevel]
+                    for ncell in nextlevelcells:
+                        nrlow, nrhign, nclow, nchigh = ncell.cellrange
+                        if nclow >= cclow and nchigh <= cchigh:
+                            curcell.child.append(ncell)
+                            # 判断当前是不是最后一层, 且 range > 0的情况
+                            if nchigh - nclow > 0 and nrhign - 1 == lastlevel:
+                                for i in range(nclow, nchigh):
+                                    cellrange = lastlevel + 1, lastlevel + 2, i, i + 1
+                                    # print(rSheet.cell_value(lastlevel + 1, i))
+                                    cmodel = self.createCellModelAccordingRange(cellrange, rSheet)
+                                    ncell.child.append(cmodel)
+
+                    # 出现跨层的情况, 如一个单元格 占两层,但是不是每一层都有子节点的情况要单独处理
+                    # 注意 这里 层级取得单元格的 rlow, 这里要和 rhigh - 1 进行对比
+                    if len(curcell.child) == 0 and crhign - 1 == lastlevel and cchigh - cclow > 0:
+                        for i in range(cclow, cchigh):
+                            cellrange = lastlevel + 1, lastlevel + 2, i, i + 1
+                            # print(rSheet.cell_value(lastlevel + 1, i))
+                            cmodel = self.createCellModelAccordingRange(cellrange, rSheet)
+                            curcell.child.append(cmodel)
+
+            self.travel(dummy, valuelist)
+            print(valuelist)
+            return valuelist, lastrow
+
+    # 将 sheet 中的单元格转换为 cellmodel
+    def createCellModelAccordingRange(self, cellrange, rSheet):
+        rlow, rhign, clow, chigh = cellrange
+        rangex = chigh - clow
+        cellvalue = rSheet.cell(rlow, clow).value
+        # self, cellrange=None, value='', level = 1, child=[]
+        level = rlow
+        # 注意这里要新建,不然会引用同一个 list
+        child = []
+        Cmodel = JSCellModel(cellrange, cellvalue, level, child)
+        return Cmodel
+
+    # 树遍历, list 用于接收返回的降范式表头
+    def travel(self, nodes, valuelist =[], combinestr=''):
+        if len(nodes.child) == 0:
+            valuelist.append(nodes.value)
+        if nodes.value == '':
+            combinestr = nodes.value
+        else:
+            combinestr = "{}/{}".format(combinestr, nodes.value)
+        # 用于判断是否是最后一层
+        flag = True
+        for node in nodes.child:
+            flag = flag & (len(node.child) == 0)
+        # 如果是最后一层
+        if flag:
+            for nextlevel in nodes.child:
+                temp = "{}/{}".format(combinestr, nextlevel.value)
+                # 由 dummy带来的空字符会在头部多一个/, 剔除
+                temp = temp.lstrip('/')
+                valuelist.append(temp)
+            return
+        else:
+            for node in nodes.child:
+                self.travel(node, valuelist, combinestr)
 
     # 读取数据表格进行比对后做合并操作 -- 根据表头进行比对来抽取数据
     def ReadDataThenCompareAndExtract(self, configuremodel):
@@ -75,21 +187,39 @@ class JSETLController(ConfigureDelegate):
         datapath = configuremodel.datapath
         # 读取所有数据文件
         datafilelist = JSExcelHandler.getPathFromRootFolder(datapath)
-        # 类型是 map
+        # 存放合并结果的路径
+        resultfilepath = configuremodel.storepath
+        # 类型是 map {路径 : df}, 这里是按照设置的起始行读取标准模板表头,默认是 0
         headsmaplist = self.readStandardHeadFromFolder(configuremodel)
-        for path in datafilelist:
-            for df in headsmaplist.values():
-                # 获取模板表头的行数,用于数据表中获取表头范围
-                totalrows = len(df.index)
-                # 根据标准表头获取数据里的表头进行比对
-                datadf = pd.read_excel(path, nrows=totalrows)
-                if datadf.equals(df):
-                    print('is the same')
+        for dfpath in headsmaplist.keys():
+            # 拼接结果文件路径, 用 os.path win 和 linux 会有自己判断
+            filename = os.path.split(dfpath)[-1]
+            newfile = resultfilepath + filename
+            '''
+            这里是为所有的标准模板预先建立数据抽取的结果文件
+            '''
+            # 降低范式
+            valuelist, lastrows = self.lowerDimensionOfTitle(dfpath, configuremodel.startrow)
+            # 创建文件及表头文件到result文件夹下为抽取该模板做准备
+            newfile, newsheetname = self.newfilesave(dfpath, newfile, valuelist)
+            # 遍历目标数据文件下所有 sheet 是否与标准模板匹配,如果匹配则进行数据抽取合并操作
+            for path in datafilelist:
+                readOpenXlsx, sheetnames, tempPath = JSExcelHandler().OpenXls(path)
+                for sheetname in sheetnames:
+                    print("校验模板表：" + str(dfpath) + "\n与数据表：" + path + '下工作表sheetname：' + sheetname + "对比")
+                    # 获取模板表头的行数,用于数据表中获取表头范围
+                    totalrows = len(headsmaplist[dfpath].index)
+                    # 根据标准表头获取数据里的表头进行比对
+                    datadf = pd.read_excel(path, sheet_name=sheetname, nrows=totalrows)
+                    if datadf.equals(headsmaplist[dfpath]):
+                        # 抽取模块
+                        self.extractEqualValue(path, sheetname, newfile, newsheetname, lastrows)
 
     # 获取标准的表头的文件,建立标准表头格式的 maplist
     def readStandardHeadFromFolder(self, configuremodel):
         headspath = configuremodel.headspath
         excellist = JSExcelHandler.getPathFromRootFolder(headspath)
+        startrow = configuremodel.startrow
         dfmaplist = {}
         # 从标准头路径中读取标准表头的格式,为比对做准备
         for index, excelpath in enumerate(excellist):
@@ -104,30 +234,57 @@ class JSETLController(ConfigureDelegate):
                 dfmaplist[excelpath] = newdf
         return dfmaplist
 
+    # 数据抽取
+    # 读取文件路径、读取文件工作簿、抽取写入的文件路径、抽取返回的工作簿、读取的文件的起始行
+    def extractEqualValue(self, datafile, datasheet, resultfile, resultsheet, lastrows):
+        df = pd.read_excel(datafile, sheet_name=datasheet, skiprows=lastrows)
+        # 写入的文件dataframe，engine：以操作工具包执行、mode必须为读状态否者会新增sheet
+        writer = pd.ExcelWriter(resultfile, engine='openpyxl', mode='w')
+        book = load_workbook(resultfile)
+        writer.book = book
+        # 创建 sheets
+        writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
+        # 获取追加行数
+        dfNum = pd.DataFrame(pd.read_excel(resultfile, sheet_name=resultsheet))
+        newRowsNum = dfNum.shape[0] + 1
+        # 写入文件
+        df.to_excel(excel_writer=writer, sheet_name=resultsheet, index=False, header=False, startrow=newRowsNum)
+        writer.save()
+
+    # 新建合并文件
+    def newfilesave(self, oldfile, newfile, valuelist):
+        df = pd.DataFrame(columns=valuelist)
+        readOpenXlsx, sheetnames, tempPath = JSExcelHandler().OpenXls(oldfile)
+        df.to_excel(newfile, sheet_name=sheetnames[0], index=False)
+        print("新表已创建完成")
+        # 创建的文件路径、返回创建的sheetname
+        return newfile, sheetnames[0]
+
 
 if __name__ == '__main__':
-    # # 配置文件路径
-    # path = os.path.abspath('..') + "/configureFile.txt"  # 表示当前所处的文件夹上一级文件夹的绝对路径
-    # controller = JSETLController()
-    #
-    # View = JSConfigureView(path)
-    # # view 层读取配置文件
-    # View.readConfigureFile()
+    # 配置文件路径
+    path = os.path.abspath('..') + "/configureFile.txt"  # 表示当前所处的文件夹上一级文件夹的绝对路径
+    controller = JSETLController()
+    View = JSConfigureView(path)
+    # view 层读取配置文件
+    View.readConfigureFile()
     #
     # # Controller 调度执行读取模板表头文件 | 根据数据文件自动识别表头
-    # controller = JSETLController()
-    # # 根据标准表头进行比对和抽取合并数据
-    # controller.ReadDataThenCompareAndExtract(View.configuremodel)
-    path = '/Users/sun/Desktop/test/'
-    list = JSExcelHandler.getPathFromRootFolder(path)
     controller = JSETLController()
-
-    for path in list:
-        readOpenXls, sheetnames, workpath = JSExcelHandler.OpenXls(path)
-        for sheetname in sheetnames:
-            rSheet = readOpenXls.sheet_by_name(sheetname)
-            controller.findMinMergeCellRange(rSheet)
+    # 根据标准表头进行比对和抽取合并数据
+    controller.ReadDataThenCompareAndExtract(View.configuremodel)
 
 
+    # ##处理规则表头和多行表头情况测试
+    #
+    # # path = 'D:\\\mergeTable\\path\\heads'
+    # path = '/Users/sun/Desktop/AUTOEtlTest/heads/'
+    # list = JSExcelHandler.getPathFromRootFolder(path)
+    # controller = JSETLController()
+    # for path in list:
+    #     readOpenXls, sheetnames, workpath = JSExcelHandler.OpenXls(path)
+    #     for sheetname in sheetnames:
+    #         rSheet = readOpenXls.sheet_by_name(sheetname)
+    #         controller.lowerDimensionOfTitle(rSheet, 2)
 
-
+    # controller.newfilesave('D:\\\mergeTable\\path\\result\\result.xlsx',['id', 'nmae'])

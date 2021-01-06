@@ -28,7 +28,6 @@ class JSConfigureView(ConfigureDelegate):
             self.configuremodel = JSConfigureModel(varsmap)
             print("读取配置文件完毕")
 
-
     def __readFile(self,filepath):
         f = open(filepath)  # 返回一个文件对象
         lines = f.readlines()  # 调用文件的 readline()方法
@@ -43,8 +42,10 @@ class JSConfigureView(ConfigureDelegate):
             elif index == 2:
                 # 读取 heads 的路径
                 varmap['headspath'] = line.strip()
+            elif index == 3:
+                # 进行比对的起始行
+                varmap['startrow'] = line.strip()
             else:
-                # 抽取文件的路径
                 varmap['keywords'] = line.strip().split(',')
 
         f.close()
