@@ -86,7 +86,6 @@ class JSETLController(ConfigureDelegate):
             # 最终降范式后的值
             valuelist = []
             # 这里是如果是 merge cell 的情况, 暂时定 mergecell 范围 > 6 的时候为标题的情况, 所以也要筛除这种情况 TODO
-
             # 这里是从上往下遍历的 mergecell,所以 mergecells 中 从左到右 row 依次增加,可以利用这点简化计算
             for index, cell in enumerate(mergedCells):
                 # 这里要根据 cell 的row 进行分级
@@ -101,7 +100,6 @@ class JSETLController(ConfigureDelegate):
             #最底层的层级
             lastlevel = max(setlist)
             minlevel = min(setlist)
-
             lastrow = lastlevel + 1
             for value in setlist:
                 levelmap[value] = []
@@ -198,10 +196,11 @@ class JSETLController(ConfigureDelegate):
             '''
             这里是为所有的标准模板预先建立数据抽取的结果文件
             '''
-            # 降低范式
+            # 降低表头的范式
             valuelist, lastrows = self.lowerDimensionOfTitle(dfpath, configuremodel.startrow)
+            # TODO 如果有title 的情况,要从 0 到 startrow 的 title 抽取单独写到目标文件里(暂时不做)
             # 创建文件及表头文件到result文件夹下为抽取该模板做准备
-            newfile, newsheetname = self.newfilesave(dfpath, newfile, valuelist)
+            newfile, newsheetname = self.newfilesave(dfpath, newfile, valuelist, configuremodel.startrow)
             # 遍历目标数据文件下所有 sheet 是否与标准模板匹配,如果匹配则进行数据抽取合并操作
             for path in datafilelist:
                 readOpenXlsx, sheetnames, tempPath = JSExcelHandler().OpenXls(path)
@@ -210,7 +209,7 @@ class JSETLController(ConfigureDelegate):
                     # 获取模板表头的行数,用于数据表中获取表头范围
                     totalrows = len(headsmaplist[dfpath].index)
                     # 根据标准表头获取数据里的表头进行比对
-                    datadf = pd.read_excel(path, sheet_name=sheetname, nrows=totalrows)
+                    datadf = pd.read_excel(path, sheet_name=sheetname, nrows=totalrows, skiprows=configuremodel.startrow)
                     if datadf.equals(headsmaplist[dfpath]):
                         # 抽取模块
                         self.extractEqualValue(path, sheetname, newfile, newsheetname, lastrows)
@@ -221,20 +220,24 @@ class JSETLController(ConfigureDelegate):
         excellist = JSExcelHandler.getPathFromRootFolder(headspath)
         startrow = configuremodel.startrow
         dfmaplist = {}
+        dflist = list(dfmaplist.keys())
         # 从标准头路径中读取标准表头的格式,为比对做准备
-        for index, excelpath in enumerate(excellist):
-            newdf = pd.read_excel(str(excelpath))
-            # '/Users/sun/Desktop/heads/head3.xlsx'
-            if len(dfmaplist) > 0:
-                for olddf in dfmaplist.values():
-                    if newdf.equals(olddf) is True:
+        for excelpath in excellist:
+            newdf = pd.read_excel(str(excelpath), skiprows= startrow)
+            print(newdf)
+            if len(dflist) > 0:
+                for olddf in dflist:
+                    if newdf.equals(olddf) == True:
+                        print('is the same')
                         break
+                    else:
+                        dfmaplist[excelpath] = newdf
+                        dflist = list(dfmaplist.keys())
             else:
-                # 以路径来作为唯一标识,因为路径是唯一的
                 dfmaplist[excelpath] = newdf
+                dflist = list(dfmaplist.values())
         return dfmaplist
 
-    # 数据抽取
     # 读取文件路径、读取文件工作簿、抽取写入的文件路径、抽取返回的工作簿、读取的文件的起始行
     def extractEqualValue(self, datafile, datasheet, resultfile, resultsheet, lastrows):
         df = pd.read_excel(datafile, sheet_name=datasheet, skiprows=lastrows)
@@ -252,9 +255,11 @@ class JSETLController(ConfigureDelegate):
         writer.save()
 
     # 新建合并文件
-    def newfilesave(self, oldfile, newfile, valuelist):
-        df = pd.DataFrame(columns=valuelist)
+    def newfilesave(self, oldfile, newfile, valuelist, startrow):
         readOpenXlsx, sheetnames, tempPath = JSExcelHandler().OpenXls(oldfile)
+        # title = pd.read_excel(oldfile, nrows=startrow)
+        # title.to_excel(newfile, sheet_name=sheetnames[0], index=False)
+        df = pd.DataFrame(columns=valuelist)
         df.to_excel(newfile, sheet_name=sheetnames[0], index=False)
         print("新表已创建完成")
         # 创建的文件路径、返回创建的sheetname
@@ -268,7 +273,6 @@ if __name__ == '__main__':
     View = JSConfigureView(path)
     # view 层读取配置文件
     View.readConfigureFile()
-    #
     # # Controller 调度执行读取模板表头文件 | 根据数据文件自动识别表头
     controller = JSETLController()
     # 根据标准表头进行比对和抽取合并数据

@@ -2,11 +2,12 @@
 /Users/sun/Desktop/AUTOEtlTest/data/
 /Users/sun/Desktop/AUTOEtlTest/heads/
 2
+Ture
 年份,单位
 
 
 
-
+// 配置文件哪个模板从第几行开始这个未添加,目前只能是每个模板单独设置一个起始行
 
 if index == 0:
     # 最终合表结果存放路径
