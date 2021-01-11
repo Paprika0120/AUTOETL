@@ -10,18 +10,15 @@
 #
 # ========================================
 import os
-
+import xlsxwriter
+import pandas as pd
 from openpyxl import load_workbook
-
-import View
-from Model.JSCellModel import JSCellModel
-from Model.JSConfigureModel import JSConfigureModel
 
 from Controller.JSExcelController import JSExcelController
 from Delegate.ConfigureDelegate import ConfigureDelegate
-from View.JSConfigureView import JSConfigureView
+from Model.JSCellModel import JSCellModel
 from Tools.JSExcelHandler import JSExcelHandler
-import pandas as pd
+from View.JSConfigureView import JSConfigureView
 
 
 class JSETLController(ConfigureDelegate):
@@ -47,6 +44,9 @@ class JSETLController(ConfigureDelegate):
         excelhandler = JSExcelController()
         excelhandler.getPathFromRootFolder()
         print("开始搜索表头")
+        # 这里自动识别表头参考之前范式降低过程中部分代码,思路依然是根据 mergecell 的层次来判断,到最低层 + 1 则为表头的整体范围
+        # 这里涉及到一个问题, 对于合并单元格的读写问题
+
 
     # 根据 merge cell 定位多范式表格的位置, 以最小range 作为标准, 如果没有 merge cell 则默认第一行为表头
     # 应该将叶子节点的数据向根节点拼接,最后降范式的值从根节点层按列 + 1的顺序得出
@@ -179,6 +179,8 @@ class JSETLController(ConfigureDelegate):
             for node in nodes.child:
                 self.travel(node, valuelist, combinestr)
 
+
+
     # 读取数据表格进行比对后做合并操作 -- 根据表头进行比对来抽取数据
     def ReadDataThenCompareAndExtract(self, configuremodel):
         # 存放表头的路径
@@ -238,7 +240,7 @@ class JSETLController(ConfigureDelegate):
                 dflist = list(dfmaplist.values())
         return dfmaplist
 
-    # 读取文件路径、读取文件工作簿、抽取写入的文件路径、抽取返回的工作簿、读取的文件的起始行
+    # 读取文件路径、读取文件工作簿、抽取写入的文件路径、抽取返回的工作簿、读取的文件的起始行 TODO 根据是否有 header 要求来判断
     def extractEqualValue(self, datafile, datasheet, resultfile, resultsheet, lastrows):
         df = pd.read_excel(datafile, sheet_name=datasheet, skiprows=lastrows)
         # 写入的文件dataframe，engine：以操作工具包执行、mode必须为读状态否者会新增sheet
@@ -255,15 +257,47 @@ class JSETLController(ConfigureDelegate):
         writer.save()
 
     # 新建合并文件
-    def newfilesave(self, oldfile, newfile, valuelist, startrow):
+    # oldfile 模板表头文件路径, newfile 合并后数据文件路径
+    # 增加是否保留检索的 header
+    def newfilesave(self, oldfile, newfile, valuelist, startrow=0, headers=False):
         readOpenXlsx, sheetnames, tempPath = JSExcelHandler().OpenXls(oldfile)
-        # title = pd.read_excel(oldfile, nrows=startrow)
-        # title.to_excel(newfile, sheet_name=sheetnames[0], index=False)
-        df = pd.DataFrame(columns=valuelist)
-        df.to_excel(newfile, sheet_name=sheetnames[0], index=False)
-        print("新表已创建完成")
-        # 创建的文件路径、返回创建的sheetname
+        if headers:
+            title = pd.read_excel(oldfile, nrows=startrow - 1)
+            title.to_excel(newfile, sheet_name=sheetnames[0], index=False, merge_cells=False)
+            writer = pd.ExcelWriter(newfile, engine='openpyxl', mode='w')
+            book = load_workbook(newfile)
+            writer.book = book
+            # 创建 sheets
+            writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
+            df = pd.DataFrame(columns=valuelist)
+            df.to_excel(excel_writer=writer, sheet_name=sheetnames[0], index=False, startrow=startrow)
+            writer.save()
+        else:
+            df = pd.DataFrame(columns=valuelist)
+            readOpenXlsx, sheetnames, tempPath = JSExcelHandler().OpenXls(oldfile)
+            df.to_excel(newfile, sheet_name=sheetnames[0], index=False)
         return newfile, sheetnames[0]
+
+    # TODO 合并单元格
+    def writeMergeCellsWithCellRange(self):
+        df = pd.DataFrame(pd.np.random.randn(10, 3), columns=list('ABC'))
+        column_list = df
+        # Create a Pandas Excel writer using XlsxWriter engine.
+        writer = pd.ExcelWriter("test.xlsx", engine='xlsxwriter')
+        df.to_excel(writer, sheet_name='Sheet1', startrow=2, header=False, index=False)
+        # Get workbook and worksheet objects
+        workbook = writer.book
+        worksheet = writer.sheets['Sheet1']
+        header_fmt = workbook.add_format(
+            {'font_name': 'Arial', 'font_size': 12, 'color': 'white', 'fg_color': '#00007f', 'bold': True, 'border': 1})
+        merge_format = workbook.add_format({'align': 'center'})
+        worksheet.merge_range('A2:C2', 'Sample', merge_format)
+        for idx, val in enumerate(column_list):
+            worksheet.write(0, idx, val, header_fmt)
+            font_fmt = workbook.add_format({'font_name': 'Arial', 'font_size': 9})
+            worksheet.set_column('A:C', None, font_fmt)
+            worksheet.set_row(0, None, header_fmt)
+            writer.save()
 
 
 if __name__ == '__main__':
@@ -275,6 +309,7 @@ if __name__ == '__main__':
     View.readConfigureFile()
     # # Controller 调度执行读取模板表头文件 | 根据数据文件自动识别表头
     controller = JSETLController()
+    # controller.writeMergeCellsWithCellRange()
     # 根据标准表头进行比对和抽取合并数据
     controller.ReadDataThenCompareAndExtract(View.configuremodel)
 
