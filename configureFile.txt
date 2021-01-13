@@ -1,23 +1,6 @@
 /Users/sun/Desktop/AUTOEtlTest/result/
 /Users/sun/Desktop/AUTOEtlTest/data/
 /Users/sun/Desktop/AUTOEtlTest/heads/
-2
-Ture
+账套 1.xlsx:2,数据 6.xlsx:2
+False
 年份,单位
-
-
-
-// 配置文件哪个模板从第几行开始这个未添加,目前只能是每个模板单独设置一个起始行
-
-if index == 0:
-    # 最终合表结果存放路径
-    varmap['storepath'] = line.strip()
-elif index == 1:
-    # 抽取文件的路径
-    varmap['filespath'] = line.strip()
-elif index == 2:
-    # 读取 heads 的路径
-    varmap['headspath'] = line.strip()
-else:
-    # 抽取文件的路径
-    varmap['keywords'] = line.strip().split(',')

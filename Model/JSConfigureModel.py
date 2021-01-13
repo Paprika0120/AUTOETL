@@ -22,8 +22,6 @@ class JSConfigureModel:
         # head 的存放路径
         self.headspath = vars['headspath']
         # 从表头的第几行开始计算,因为前几行可能有标题的情况
-        self.startrow = int(vars['startrow'])
-        # 如果 startrow > 0 是否保留表头
-        self.startrow = int(vars['startrow'])
-        # 是否启用配置文件
-        # self.configureAvailable = configureAvailable
+        self.validrange = vars['validrange']
+        # 是否保留表头
+        self.reserveHead = vars['reserveHead']

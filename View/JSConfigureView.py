@@ -15,7 +15,7 @@ from Model.JSConfigureModel import JSConfigureModel
 
 class JSConfigureView(ConfigureDelegate):
 
-    def __init__(self, filepath):
+    def __init__(self, filepath=''):
         self.filepath = filepath
         self.configuremodel = None
 
@@ -44,12 +44,34 @@ class JSConfigureView(ConfigureDelegate):
                 varmap['headspath'] = line.strip()
             elif index == 3:
                 # 进行比对的起始行
-                varmap['startrow'] = line.strip()
+                varmap['validrange'] = self.transformStringToMap(line.strip())
+            elif index == 4:
+                # 进行比对的起始行
+                varmap['reserveHead'] = line.strip()
             else:
                 varmap['keywords'] = line.strip().split(',')
-
         f.close()
         return varmap
+
+    # 将对应的 表头:有效范围 分开
+    def transformStringToMap(self, text=''):
+        print(text)
+        map = {}
+        maplist = text.split(',')
+        for item in maplist:
+            temp = item.split(':')
+            map[temp[0]] = temp[1]
+        return map
+
+
+if __name__ == '__main__':
+    print("hello world")
+    view = JSConfigureView()
+    str = '账套 1.xlsx:2,数据 6.xlsx:2'
+    view.transformStringToMap(str)
+
+
+
 
 
 

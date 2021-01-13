@@ -38,7 +38,6 @@ class JSExcelHandler(object):
     # 打开 workbook 读取 workbook 的基本信息
     @classmethod
     def OpenXls(cls, workpath):
-        print(workpath)
         tempPath = workpath
         workpath = workpath.lower()
         readOpenXlsx = None
