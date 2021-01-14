@@ -97,3 +97,15 @@ class JSExcelHandler(object):
             print
             path + ' 目录已存在'
             return False
+
+    @classmethod
+    def readtxt(cls, filepath):
+        with open(filepath) as f:
+            lines = f.readlines()  # 调用文件的 readline()方法
+        return lines
+
+    @classmethod
+    def errorlog(cls, text):
+        with open('errorlog.txt', 'a+') as f:
+            f.write('{}\n'.format(text))
+

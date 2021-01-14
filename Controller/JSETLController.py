@@ -10,6 +10,13 @@
 #
 # ========================================
 import os
+import shutil
+import time
+import tkinter
+from tkinter import *
+from tkinter import messagebox
+from tkinter import filedialog
+
 import xlsxwriter
 import pandas as pd
 import numpy as np
@@ -19,14 +26,15 @@ from Delegate.ConfigureDelegate import ConfigureDelegate
 from Model.JSCellModel import JSCellModel
 from Tools.JSExcelHandler import JSExcelHandler
 from View.JSConfigureView import JSConfigureView
+from View.JSETLWindow import JSETLWindow
 
 
 class JSETLController(ConfigureDelegate):
-
-    # def __init__(self, configurefile):
-    #
-    #     self.configureV = JSConfigureView(configurefile)
-    #     self.configureV.readConfigureFile()
+    def __init__(self):
+        self.etlwindow = JSETLWindow()
+        self.etlwindow.gui_arrang()
+        self.etlwindow.delegate = self
+        print("启动开始")
 
     # 合并两个表中差异字段 TODO
     def mergeDataFrame(self):
@@ -34,42 +42,46 @@ class JSETLController(ConfigureDelegate):
 
     # 自动根据数据提取表头
     def autoExtractSheetHead(self, configuremodel):
+        print("开始抽取模板表头")
         datapath = configuremodel.datapath
         # 所有需要合并的表格数据
         exceldatalist = JSExcelHandler.getPathFromRootFolder(datapath)
         dflist = []
         for path in exceldatalist:
             print(path)
-            readOpenXlsx, sheetnames, tempPath = JSExcelHandler().OpenXls(path)
-            for sheetname in sheetnames:
-                rSheet = readOpenXlsx.sheet_by_name(sheetname)
-                mergecells = rSheet.merged_cells
-                # 默认第一行为表头
-                headrow = 1
-                # 没有合并单元格的情况
-                if len(mergecells) == 0:
-                    headrow = 1
-                else:
-                    levelmap = self.createLevelMap(mergecells, rSheet)
-                    # 根据合并单元格的位置获取表头的范围
-                    # 注意 这里和降范式的 最后行判断是不一样的,因为这个是整个表头提取,而降范式只要层级的根节点的 level 作为行数来提取数据
-                    maxlevel = max(levelmap.keys())
-                    lowestnodes = levelmap[maxlevel]
-                    rlow, rhign, clow, chigh = cellrange = lowestnodes[0].cellrange
-                    headrow = rhign + 1
-                curdf = pd.read_excel(path, sheetname, nrows=headrow, header=None)
-
-                # 每个进行遍历对比,完全不同则添加到 list 中
-                flag = True
-                for olddf in dflist:
-                    if curdf.equals(olddf):
-                        flag = False
-                        pass
-                if flag:
-                    dflist.append(curdf)
-                    filename = os.path.split(path)[-1]
-                    objectpath = "{}/{}".format(configuremodel.headspath, filename)
-                    self.restoreHead(path, objectpath, curdf, headrow)
+            try:
+                readOpenXlsx, sheetnames, tempPath = JSExcelHandler().OpenXls(path)
+                for sheetname in sheetnames:
+                    rSheet = readOpenXlsx.sheet_by_name(sheetname)
+                    mergecells = rSheet.merged_cells
+                    # 默认第一行为表头
+                    # 没有合并单元格的情况
+                    if len(mergecells) == 0:
+                        headrow = 1
+                    else:
+                        levelmap = self.createLevelMap(mergecells, rSheet)
+                        # 根据合并单元格的位置获取表头的范围
+                        # 注意 这里和降范式的 最后行判断是不一样的,因为这个是整个表头提取,而降范式只要层级的根节点的 level 作为行数来提取数据
+                        maxlevel = max(levelmap.keys())
+                        lowestnodes = levelmap[maxlevel]
+                        rlow, rhign, clow, chigh = cellrange = lowestnodes[0].cellrange
+                        headrow = rhign + 1
+                    curdf = pd.read_excel(path, sheetname, nrows=headrow, header=None)
+                    # 每个进行遍历对比,完全不同则添加到 list 中
+                    flag = True
+                    for olddf in dflist:
+                        if curdf.equals(olddf):
+                            flag = False
+                            pass
+                    if flag:
+                        dflist.append(curdf)
+                        filename = os.path.split(path)[-1]
+                        objectpath = "{}/{}".format(configuremodel.headspath, filename)
+                        self.restoreHead(path, objectpath, curdf, headrow)
+            except Exception as e:
+                JSExcelHandler.errorlog("自动根据数据提取表头,原数据文件有问题-{}".format(path))
+                pass
+        print("抽取模板表头完成")
 
     # 根据 merge cell 定位多范式表格的位置, 以最小range 作为标准, 如果没有 merge cell 则默认第一行为表头
     # 应该将叶子节点的数据向根节点拼接,最后降范式的值从根节点层按列 + 1的顺序得出
@@ -208,6 +220,7 @@ class JSETLController(ConfigureDelegate):
 
     # 读取数据表格进行比对后做合并操作 -- 根据表头进行比对来抽取数据
     def ReadDataThenCompareAndExtract(self, configuremodel):
+        print("开始抽取合并数据")
         # 存放表头的路径
         datapath = configuremodel.datapath
         # 读取所有数据文件
@@ -226,31 +239,39 @@ class JSETLController(ConfigureDelegate):
             '''
             这里是为所有的标准模板预先建立数据抽取的结果文件
             '''
-            # 降低表头的范式
-            valuelist, lastrows = self.lowerDimensionOfTitle(dfpath, startrow)
-            # TODO 如果有title 的情况,要从 0 到 startrow 的 title 抽取单独写到目标文件里(暂时不做)
-            # 创建文件及表头文件到result文件夹下为抽取该模板做准备
-            newfile, newsheetname = self.newfilesave(dfpath, newfile, valuelist, startrow)
+            try:
+                # 降低表头的范式
+                valuelist, lastrows = self.lowerDimensionOfTitle(dfpath, startrow)
+                # TODO 如果有title 的情况,要从 0 到 startrow 的 title 抽取单独写到目标文件里(暂时不做)
+                # 创建文件及表头文件到result文件夹下为抽取该模板做准备
+                newfile, newsheetname = self.newfilesave(dfpath, newfile, valuelist, startrow)
+            except Exception as e:
+                JSExcelHandler.errorlog("降范式并且新建表头文件未抽取数据做准备-{}".format(dfpath))
+                pass
             # 遍历目标数据文件下所有 sheet 是否与标准模板匹配,如果匹配则进行数据抽取合并操作
             for path in datafilelist:
                 print(path)
-                readOpenXlsx, sheetnames, tempPath = JSExcelHandler().OpenXls(path)
-                for sheetname in sheetnames:
-                    #print("校验模板表：" + str(dfpath) + "\n与数据表：" + path + '下工作表sheetname：' + sheetname + "对比")
-                    # 获取模板表头的行数,用于数据表中获取表头范围
-                    totalrows = len(headsmaplist[dfpath].index)
-                    # 根据标准表头获取数据里的表头进行比对
-                    datadf = pd.read_excel(path, sheet_name=sheetname, nrows=totalrows, skiprows=startrow)
-                    if datadf.equals(headsmaplist[dfpath]):
-                        # 抽取模块headsmaplist
-                        df = pd.read_excel(path, sheetname, skiprows=lastrows)
-                        self.apendDataFrame(df, newfile, newsheetname, False)
+                try:
+                    readOpenXlsx, sheetnames, tempPath = JSExcelHandler().OpenXls(path)
+                    for sheetname in sheetnames:
+                        # print("校验模板表：" + str(dfpath) + "\n与数据表：" + path + '下工作表sheetname：' + sheetname + "对比")
+                        # 获取模板表头的行数,用于数据表中获取表头范围
+                        totalrows = len(headsmaplist[dfpath].index)
+                        # 根据标准表头获取数据里的表头进行比对
+                        datadf = pd.read_excel(path, sheet_name=sheetname, nrows=totalrows, skiprows=startrow)
+
+                        if datadf.equals(headsmaplist[dfpath]):
+                            # 抽取模块headsmaplist
+                            df = pd.read_excel(path, sheetname, skiprows=lastrows)
+                            self.apendDataFrame(df, newfile, newsheetname, False)
+                except Exception as e:
+                    JSExcelHandler.errorlog("遍历目标数据文件下所有 sheet 与标准模板匹配后追加数据-{}".format(path))
+        print("合并数据完成")
 
     # 获取标准的表头的文件,建立标准表头格式的 maplist
     def readStandardHeadFromFolder(self, configuremodel):
         headspath = configuremodel.headspath
         excellist = JSExcelHandler.getPathFromRootFolder(headspath)
-
         dfmaplist = {}
         dflist = list(dfmaplist.keys())
         # 从标准头路径中读取标准表头的格式,为比对做准备
@@ -259,7 +280,11 @@ class JSETLController(ConfigureDelegate):
             startrow = 0
             if filename in configuremodel.validrange:
                 startrow = int(configuremodel.validrange[filename])
-            newdf = pd.read_excel(str(excelpath), skiprows=startrow)
+            try:
+                newdf = pd.read_excel(str(excelpath), skiprows=startrow)
+            except Exception as e:
+                JSExcelHandler.errorlog("获取标准表头-{}".format(excelpath))
+                pass
             if len(dflist) > 0:
                 for olddf in dflist:
                     if newdf.equals(olddf) == True:
@@ -281,7 +306,10 @@ class JSETLController(ConfigureDelegate):
         # 创建 sheets
         writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
         # 获取追加行数
-        dfNum = pd.DataFrame(pd.read_excel(resultfile, sheet_name=resultsheet))
+        try:
+            dfNum = pd.DataFrame(pd.read_excel(resultfile, sheet_name=resultsheet))
+        except Exception as e:
+            JSExcelHandler.errorlog("追加合并数据-{}".format(resultfile))
         newRowsNum = dfNum.shape[0] + 1
         # 写入文件
         apenddf.to_excel(excel_writer=writer, sheet_name=resultsheet, index=False, header=header, startrow=newRowsNum)
@@ -345,20 +373,26 @@ class JSETLController(ConfigureDelegate):
         return writer, sheetnames
 
 if __name__ == '__main__':
-    # 配置文件路径
-    path = os.path.abspath('..') + "/configureFile.txt"  # 表示当前所处的文件夹上一级文件夹的绝对路径
-    controller = JSETLController()
-    View = JSConfigureView(path)
-    # view 层读取配置文件
-    View.readConfigureFile()
-    # # Controller 调度执行读取模板表头文件 | 根据数据文件自动识别表头
-    controller = JSETLController()
-    # 根据标准表头进行比对和抽取合并数据
-    # controller.ReadDataThenCompareAndExtract(View.configuremodel)
-    # print("ETL Finished")
 
-    # 识别数据表中的表头,并抽取表头作为标准表头模板参考
-    controller.autoExtractSheetHead(View.configuremodel)
+    # GUI 测试
+    controller = JSETLController()
+    tkinter.mainloop()
+
+
+    # 文本格式配置文件的测试
+    # path = os.path.abspath('..') + "/configureFile.txt"  # 表示当前所处的文件夹上一级文件夹的绝对路径
+    # View = JSConfigureView(path)
+    # # view 层读取配置文件
+    # View.readConfigureFile()
+    # # Controller 调度执行读取模板表头文件 | 根据数据文件自动识别表头
+    # controller = JSETLController()
+    # # 根据标准表头进行比对和抽取合并数据
+    # controller.ReadDataThenCompareAndExtract(View.configuremodel)
+    # # print("ETL Finished")
+    #
+    # # 识别数据表中的表头,并抽取表头作为标准表头模板参考
+    # controller.autoExtractSheetHead(View.configuremodel)
+
 
     # ##处理规则表头和多行表头情况测试
     #

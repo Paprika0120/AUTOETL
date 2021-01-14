@@ -11,6 +11,7 @@
 # ========================================
 from Delegate.ConfigureDelegate import ConfigureDelegate
 from Model.JSConfigureModel import JSConfigureModel
+from Tools.JSExcelHandler import  JSExcelHandler
 
 
 class JSConfigureView(ConfigureDelegate):
@@ -29,8 +30,7 @@ class JSConfigureView(ConfigureDelegate):
             print("读取配置文件完毕")
 
     def __readFile(self,filepath):
-        f = open(filepath)  # 返回一个文件对象
-        lines = f.readlines()  # 调用文件的 readline()方法
+        lines = JSExcelHandler.readtxt(filepath)
         varmap = {}
         for index, line in enumerate(lines):
             if index == 0:
@@ -50,7 +50,6 @@ class JSConfigureView(ConfigureDelegate):
                 varmap['reserveHead'] = line.strip()
             else:
                 varmap['keywords'] = line.strip().split(',')
-        f.close()
         return varmap
 
     # 将对应的 表头:有效范围 分开
@@ -63,12 +62,11 @@ class JSConfigureView(ConfigureDelegate):
             map[temp[0]] = temp[1]
         return map
 
-
-if __name__ == '__main__':
-    print("hello world")
-    view = JSConfigureView()
-    str = '账套 1.xlsx:2,数据 6.xlsx:2'
-    view.transformStringToMap(str)
+# if __name__ == '__main__':
+#     print("hello world")
+#     view = JSConfigureView()
+#     str = '账套 1.xlsx:2,数据 6.xlsx:2'
+#     view.transformStringToMap(str)
 
 
 

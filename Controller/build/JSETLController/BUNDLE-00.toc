@@ -1,0 +1,3 @@
+([('JSETLController',
+   '/Users/sun/Desktop/Development/Python_Demos/AutoETL/Controller/dist/JSETLController',
+   'EXECUTABLE')],)
