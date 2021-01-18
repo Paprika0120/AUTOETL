@@ -46,7 +46,6 @@ class JSETLController(ConfigureDelegate):
         exceldatalist = JSExcelHandler.getPathFromRootFolder(datapath)
         dflist = []
         for path in exceldatalist:
-            print(path)
             try:
                 readOpenXlsx, sheetnames, tempPath = JSExcelHandler().OpenXls(path)
                 for sheetname in sheetnames:
@@ -64,7 +63,6 @@ class JSETLController(ConfigureDelegate):
                         lowestnodes = levelmap[maxlevel]
                         rlow, rhign, clow, chigh = cellrange = lowestnodes[0].cellrange
                         headrow = rhign + 1
-
                     curdf = pd.read_excel(path, sheetname, nrows=headrow, header=None)
                     # 每个进行遍历对比,完全不同则添加到 list 中
                     flag = True
@@ -78,10 +76,11 @@ class JSETLController(ConfigureDelegate):
                     if flag:
                         dflist.append(curdf)
                         filename, suffix = JSExcelHandler.SplitPathReturnNameAndSuffix(path)
-                        objectpath = "{}/{}_{}.{}".format(configuremodel.headspath, filename, sheetname, suffix)
+                        # 这里要保存为 xlsx 为了兼容合并单元格的功能
+                        objectpath = "{}/{}_{}.{}".format(configuremodel.headspath, filename, sheetname, 'xlsx')
                         self.restoreHead(path, sheetname, objectpath, curdf, headrow)
-
             except Exception as e:
+                print(str(e))
                 JSExcelHandler.errorlog("自动根据数据提取表头,原数据文件有问题-{}".format(path))
                 pass
         print("抽取模板表头完成")
@@ -190,7 +189,7 @@ class JSETLController(ConfigureDelegate):
                 # 每一层级的 node 进行从左到右的排序
                 if len(curcell.child) > 1:
                     childs = curcell.child
-                    childs = sorted(childs, key=lambda node:node.cellrange[2])
+                    childs = sorted(childs, key=lambda node: node.cellrange[2])
                     curcell.child = childs
         return dummy
 
@@ -266,7 +265,6 @@ class JSETLController(ConfigureDelegate):
                 pass
             # 遍历目标数据文件下所有 sheet 是否与标准模板匹配,如果匹配则进行数据抽取合并操作
             for path in datafilelist:
-                print(path)
                 try:
                     readOpenXlsx, sheetnames, tempPath = JSExcelHandler().OpenXls(path)
                     for sheetname in sheetnames:
