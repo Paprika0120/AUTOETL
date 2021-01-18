@@ -91,6 +91,7 @@ class JSETLController(ConfigureDelegate):
         readOpenXlsx, sheetnames, tempPath = JSExcelHandler().OpenXls(path)
         rSheet = readOpenXlsx.sheet_by_name(sheetnames[0])
         valuelist = []
+        keywords= ['h']
         lastrow = 0
         # 表格的列边界
         ecol = rSheet.ncols
@@ -111,17 +112,19 @@ class JSETLController(ConfigureDelegate):
             for colindex in range(0, ecol):
                 value = rSheet.cell_value(0, colindex)
                 valuelist.append(value)
+                keywords.append(value)
             # print("判断--" + rSheet.name + "--的合并单元格已结束")
             # 参数返回：范式标识（False为一范式，True为多范式）、表头值、数据行坐标
-            return valuelist, lastrow
+            return valuelist, lastrow, keywords
         else:
             levelmap = self.createLevelMap(mergedCells, rSheet)
             maxlevel = max(levelmap.keys())
             dummy = self.createLevelTree(levelmap, rSheet)
             # TODO 根据层级来生成最终的 valuelist
-            self.travel(dummy, valuelist, maxlevel)
+            self.travel(dummy, valuelist, keywords, maxlevel)
+            print(keywords)
             lastrow = max(levelmap.keys()) + 1
-            return valuelist, lastrow
+            return valuelist, lastrow, keywords
 
     def createLevelMap(self, mergedCells, rSheet):
         # 用于标记表头的最后一行位置
@@ -205,7 +208,7 @@ class JSETLController(ConfigureDelegate):
         return Cmodel
 
     # 树遍历, list 用于接收返回的降范式表头
-    def travel(self, nodes, valuelist=[], combinestr='', lv=1):
+    def travel(self, nodes, valuelist=[],keywords=[], combinestr='', lv=1):
         if nodes.value == '':
             combinestr = nodes.value
         else:
@@ -219,16 +222,18 @@ class JSETLController(ConfigureDelegate):
             if len(nodes.child) == 0:
                 combinestr = combinestr.lstrip('/')
                 valuelist.append(combinestr)
+                keywords.append(nodes.value)
                 return
             for nextlevel in nodes.child:
                 temp = "{}/{}".format(combinestr, nextlevel.value)
                 # 由 dummy带来的空字符会在头部多一个/, 剔除
                 temp = temp.lstrip('/')
                 valuelist.append(temp)
+                keywords.append(nextlevel.value)
             return
         else:
             for node in nodes.child:
-                self.travel(node, valuelist, combinestr, lv)
+                self.travel(node, valuelist,keywords, combinestr, lv)
 
     # 读取数据表格进行比对后做合并操作 -- 根据表头进行比对来抽取数据
     def ReadDataThenCompareAndExtract(self, configuremodel):
@@ -256,7 +261,7 @@ class JSETLController(ConfigureDelegate):
             '''
             try:
                 # 降低表头的范式
-                valuelist, lastrows = self.lowerDimensionOfTitle(dfpath, startrow)
+                valuelist, lastrows, keywords = self.lowerDimensionOfTitle(dfpath, startrow)
                 # TODO 如果有title 的情况,要从 0 到 startrow 的 title 抽取单独写到目标文件里(暂时不做)
                 # 创建文件及表头文件到result文件夹下为抽取该模板做准备
                 newfile, newsheetname = self.newfilesave(dfpath, newfile, valuelist, startrow)
