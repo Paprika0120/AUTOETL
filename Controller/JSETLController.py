@@ -91,7 +91,7 @@ class JSETLController(ConfigureDelegate):
         readOpenXlsx, sheetnames, tempPath = JSExcelHandler().OpenXls(path)
         rSheet = readOpenXlsx.sheet_by_name(sheetnames[0])
         valuelist = []
-        keywords= ['h']
+        keywords= []
         lastrow = 0
         # 表格的列边界
         ecol = rSheet.ncols
