@@ -17,7 +17,6 @@ from tkinter import *
 from tkinter import messagebox
 from tkinter import filedialog
 
-import xlsxwriter
 import pandas as pd
 import numpy as np
 from openpyxl import load_workbook
@@ -32,9 +31,8 @@ from View.JSETLWindow import JSETLWindow
 class JSETLController(ConfigureDelegate):
     def __init__(self):
         self.etlwindow = JSETLWindow()
-        self.etlwindow.gui_arrang()
+        # self.etlwindow.gui_arrang()
         self.etlwindow.delegate = self
-        print("启动开始")
 
     # 合并两个表中差异字段 TODO
     def mergeDataFrame(self):
@@ -66,6 +64,7 @@ class JSETLController(ConfigureDelegate):
                         lowestnodes = levelmap[maxlevel]
                         rlow, rhign, clow, chigh = cellrange = lowestnodes[0].cellrange
                         headrow = rhign + 1
+
                     curdf = pd.read_excel(path, sheetname, nrows=headrow, header=None)
                     # 每个进行遍历对比,完全不同则添加到 list 中
                     flag = True
@@ -73,11 +72,15 @@ class JSETLController(ConfigureDelegate):
                         if curdf.equals(olddf):
                             flag = False
                             pass
+                    # 第一次
+                    if len(dflist) == 0:
+                        flag = True
                     if flag:
                         dflist.append(curdf)
-                        filename = os.path.split(path)[-1]
-                        objectpath = "{}/{}".format(configuremodel.headspath, filename)
-                        self.restoreHead(path, objectpath, curdf, headrow)
+                        filename, suffix = JSExcelHandler.SplitPathReturnNameAndSuffix(path)
+                        objectpath = "{}/{}_{}.{}".format(configuremodel.headspath, filename, sheetname, suffix)
+                        self.restoreHead(path, sheetname, objectpath, curdf, headrow)
+
             except Exception as e:
                 JSExcelHandler.errorlog("自动根据数据提取表头,原数据文件有问题-{}".format(path))
                 pass
@@ -114,8 +117,10 @@ class JSETLController(ConfigureDelegate):
             return valuelist, lastrow
         else:
             levelmap = self.createLevelMap(mergedCells, rSheet)
+            maxlevel = max(levelmap.keys())
             dummy = self.createLevelTree(levelmap, rSheet)
-            self.travel(dummy, valuelist)
+            # TODO 根据层级来生成最终的 valuelist
+            self.travel(dummy, valuelist, maxlevel)
             lastrow = max(levelmap.keys()) + 1
             return valuelist, lastrow
 
@@ -157,6 +162,7 @@ class JSETLController(ConfigureDelegate):
         # 按层级遍历,将子节点的 x 轴范围数据父节点 x 轴范围的情况进行连接
         for curlevel in range(minlevel, lastlevel):
             currentcells = levelmap[curlevel]
+            # 每层按照起始 col 进行排序 TODO
             for i, curcell in enumerate(currentcells):
                 crlow, crhign, cclow, cchigh = curcell.cellrange
                 nextlevel = curlevel + 1
@@ -178,9 +184,14 @@ class JSETLController(ConfigureDelegate):
                 if len(curcell.child) == 0 and crhign - 1 == lastlevel and cchigh - cclow > 0:
                     for i in range(cclow, cchigh):
                         cellrange = lastlevel + 1, lastlevel + 2, i, i + 1
-                        # print(rSheet.cell_value(lastlevel + 1, i))
+                        print(rSheet.cell_value(lastlevel + 1, i))
                         cmodel = self.createCellModelAccordingRange(cellrange, rSheet)
                         curcell.child.append(cmodel)
+                # 每一层级的 node 进行从左到右的排序
+                if len(curcell.child) > 1:
+                    childs = curcell.child
+                    childs = sorted(childs, key=lambda node:node.cellrange[2])
+                    curcell.child = childs
         return dummy
 
     # 将 sheet 中的单元格转换为 cellmodel
@@ -195,9 +206,7 @@ class JSETLController(ConfigureDelegate):
         return Cmodel
 
     # 树遍历, list 用于接收返回的降范式表头
-    def travel(self, nodes, valuelist=[], combinestr=''):
-        if len(nodes.child) == 0:
-            valuelist.append(nodes.value)
+    def travel(self, nodes, valuelist=[], combinestr='', lv=1):
         if nodes.value == '':
             combinestr = nodes.value
         else:
@@ -208,6 +217,10 @@ class JSETLController(ConfigureDelegate):
             flag = flag & (len(node.child) == 0)
         # 如果是最后一层
         if flag:
+            if len(nodes.child) == 0:
+                combinestr = combinestr.lstrip('/')
+                valuelist.append(combinestr)
+                return
             for nextlevel in nodes.child:
                 temp = "{}/{}".format(combinestr, nextlevel.value)
                 # 由 dummy带来的空字符会在头部多一个/, 剔除
@@ -216,7 +229,7 @@ class JSETLController(ConfigureDelegate):
             return
         else:
             for node in nodes.child:
-                self.travel(node, valuelist, combinestr)
+                self.travel(node, valuelist, combinestr, lv)
 
     # 读取数据表格进行比对后做合并操作 -- 根据表头进行比对来抽取数据
     def ReadDataThenCompareAndExtract(self, configuremodel):
@@ -233,9 +246,12 @@ class JSETLController(ConfigureDelegate):
             # 拼接结果文件路径, 用 os.path win 和 linux 会有自己判断
             filename = os.path.split(dfpath)[-1]
             startrow = 0
-            if filename in configuremodel.validrange:
-                startrow = int(configuremodel.validrange[filename])
-            newfile = resultfilepath + filename
+            rangemap = configuremodel.validrange
+            if rangemap != {}:
+                if filename in configuremodel.validrange:
+                    startrow = int(configuremodel.validrange[filename])
+            newfile = os.path.join(resultfilepath,filename)
+
             '''
             这里是为所有的标准模板预先建立数据抽取的结果文件
             '''
@@ -319,27 +335,27 @@ class JSETLController(ConfigureDelegate):
     # oldfile 模板表头文件路径, newfile 合并后数据文件路径
     # 增加是否保留检索的 header
     def newfilesave(self, oldfile, newfile, valuelist, startrow=0, headers=False):
-        if startrow > 1:
+        readOpenXlsx, sheetnames, tempPath = JSExcelHandler().OpenXls(oldfile)
+        if startrow > 0:
             headers = True
         if headers:
             title = pd.read_excel(oldfile, header=None, nrows=startrow)
-            xlwter, sheetnames = self.restoreHead(oldfile, newfile, title, startrow)
+            xlwter, sheetnames = self.restoreHead(oldfile, sheetnames[0], newfile, title, startrow)
             df = pd.DataFrame(columns=valuelist)
             self.apendDataFrame(df, newfile, sheetnames[0], True)
         else:
             df = pd.DataFrame(columns=valuelist)
-            readOpenXlsx, sheetnames, tempPath = JSExcelHandler().OpenXls(oldfile)
             df.to_excel(newfile, sheet_name=sheetnames[0], index=False)
         return newfile, sheetnames[0]
 
     # 按照 mergecell 的范围重写入表头并按原表合并单元格
-    def restoreHead(self, oldfilepath, newfile, title, startrow=0):
+    def restoreHead(self, oldfilepath, sheetname, newfile, title, startrow=0):
         readOpenXlsx, sheetnames, tempPath = JSExcelHandler().OpenXls(oldfilepath)
         writer = pd.ExcelWriter(newfile, engine='xlsxwriter')
         workbook = writer.book
         merge_format = workbook.add_format({'align': 'center'})
         title.to_excel(writer, sheet_name=sheetnames[0], index=False, header=False)
-        rsheet = readOpenXlsx.sheet_by_name(sheetnames[0])
+        rsheet = readOpenXlsx.sheet_by_name(sheetname)
         resultCells = rsheet.merged_cells
         mergedCells = []
         # 根据原表中的 cellrange 确定合并单元格的范围, 筛选出 header 部分有合并单元格的情况
@@ -377,7 +393,6 @@ if __name__ == '__main__':
     # GUI 测试
     controller = JSETLController()
     tkinter.mainloop()
-
 
     # 文本格式配置文件的测试
     # path = os.path.abspath('..') + "/configureFile.txt"  # 表示当前所处的文件夹上一级文件夹的绝对路径

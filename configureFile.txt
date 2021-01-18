@@ -1,6 +1,6 @@
-/Users/sun/Desktop/AUTOEtlTest/result/
 /Users/sun/Desktop/AUTOEtlTest/data/
 /Users/sun/Desktop/AUTOEtlTest/heads/
+/Users/sun/Desktop/AUTOEtlTest/result/
 账套 1.xlsx:2,数据 6.xlsx:2
 False
 年份,单位

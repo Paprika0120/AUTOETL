@@ -109,3 +109,8 @@ class JSExcelHandler(object):
         with open('errorlog.txt', 'a+') as f:
             f.write('{}\n'.format(text))
 
+    @classmethod
+    def SplitPathReturnNameAndSuffix(self, path):
+        filename = os.path.split(path)[-1].split('.')[0]
+        suffix = os.path.split(path)[-1].split('.')[1]
+        return filename, suffix

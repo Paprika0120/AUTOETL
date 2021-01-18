@@ -34,14 +34,14 @@ class JSConfigureView(ConfigureDelegate):
         varmap = {}
         for index, line in enumerate(lines):
             if index == 0:
-                # 最终合表结果存放路径
-                varmap['storepath'] = line.strip()
-            elif index == 1:
                 # 抽取文件的路径
                 varmap['datapath'] = line.strip()
-            elif index == 2:
+            elif index == 1:
                 # 读取 heads 的路径
                 varmap['headspath'] = line.strip()
+            elif index == 2:
+                # 最终合表结果存放路径
+                varmap['storepath'] = line.strip()
             elif index == 3:
                 # 进行比对的起始行
                 varmap['validrange'] = self.transformStringToMap(line.strip())
