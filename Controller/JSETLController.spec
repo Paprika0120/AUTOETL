@@ -7,7 +7,7 @@ a = Analysis(['JSETLController.py'],
              pathex=['/Users/sun/Desktop/Development/Python_Demos/AutoETL/Controller'],
              binaries=[],
              datas=[],
-             hiddenimports=['pandas._libs.tslibs.timedeltas'],
+             hiddenimports=[],
              hookspath=[],
              runtime_hooks=[],
              excludes=[],
@@ -15,6 +15,17 @@ a = Analysis(['JSETLController.py'],
              win_private_assemblies=False,
              cipher=block_cipher,
              noarchive=False)
+# Add the following
+def get_pandas_path():
+    import pandas
+    pandas_path = pandas.__path__[0]
+    return pandas_path
+
+
+dict_tree = Tree(get_pandas_path(), prefix='pandas', excludes=["*.pyc"])
+a.datas += dict_tree
+a.binaries = filter(lambda x: 'pandas' not in x[0], a.binaries)
+
 pyz = PYZ(a.pure, a.zipped_data,
              cipher=block_cipher)
 exe = EXE(pyz,

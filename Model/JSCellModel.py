@@ -12,8 +12,6 @@
 from collections import Counter
 from typing import List, Union
 
-text = ''
-
 class JSCellModel:
     # 层级 cell
     def __init__(self, cellrange=None, value='', level = 0, child=[]):
@@ -24,7 +22,6 @@ class JSCellModel:
         # 当前范式的值
         self.value = value
         self.level = level
-
 
 if __name__ == '__main__':
 

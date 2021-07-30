@@ -12,21 +12,21 @@
 import os
 import xlrd
 import xlwt
-
+import pandas as pd
 
 class JSExcelHandler(object):
 
     # 获取 Excel 文件路径
     @classmethod
-    def getPathFromRootFolder(cls, rootfolder):
-        excelList = []
+    def getPathFromRootFolder(cls, rootfolder, excelList=[]):
+
         # temp是当前目录下的文件名称
         for temp in os.listdir(rootfolder):
             # 拼接绝对路径D
             filepath = os.path.join(rootfolder, temp)
             if os.path.isdir(filepath):
                 # 判断是否文件夹，如果是文件夹，则继续递归遍历
-                cls.getPathFromRootFolder(filepath)
+                cls.getPathFromRootFolder(filepath, excelList)
             else:
                 (name, extension) = os.path.splitext(temp)
                 extension = extension.lower()
@@ -98,6 +98,7 @@ class JSExcelHandler(object):
             path + ' 目录已存在'
             return False
 
+    # 最早用于读取配置文件,现已做成 GUI 来读取配置文件
     @classmethod
     def readtxt(cls, filepath):
         with open(filepath) as f:
@@ -106,11 +107,80 @@ class JSExcelHandler(object):
 
     @classmethod
     def errorlog(cls, text):
-        with open('errorlog.txt', 'a+') as f:
+        with open('errorlog.txt', 'a+', encoding='UTF-8') as f:
+            f.write('{}\n'.format(text))
+
+
+    @classmethod
+    def pathlog(cls, text):
+        with open('pathlog.txt', 'a+', encoding='UTF-8') as f:
             f.write('{}\n'.format(text))
 
     @classmethod
-    def SplitPathReturnNameAndSuffix(self, path):
-        filename = os.path.split(path)[-1].split('.')[0]
-        suffix = os.path.split(path)[-1].split('.')[1]
+    def excuteCheck(cls, text):
+        with open('checklog.txt', 'a+', encoding='UTF-8') as f:
+            f.write('{}\n'.format(text))
+
+    # 返回文件名
+    @classmethod
+    def SplitPathReturnNameAndSuffix(cls, path):
+        filename = os.path.split(path)[-1].split('.')[-2]
+        suffix = os.path.split(path)[-1].split('.')[-1]
         return filename, suffix
+
+    # 删除重复行
+    @classmethod
+    def dropDuplicatedData(cls, sourcepath, objectpath, startrow=4):
+        excellist = cls.getPathFromRootFolder(sourcepath)
+        sum = None
+        for path in excellist:
+            df = pd.read_excel(path, skiprows=startrow,header=None)
+            if sum is None:
+                sum = df
+            else:
+                sum = sum.append(df)
+
+        # sum.drop_duplicates()
+        sum = sum.drop_duplicates()
+        objectpath += '/合并去重.xlsx'
+        sum.to_excel(objectpath, index=False,header=None)
+
+    # 身份证校验
+    @classmethod
+    def checkIDNumber(cls, num_str):
+        str_to_int = {'0': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5,
+                      '6': 6, '7': 7, '8': 8, '9': 9, 'X': 10}
+        check_dict = {0: '1', 1: '0', 2: 'X', 3: '9', 4: '8', 5: '7',
+                      6: '6', 7: '5', 8: '4', 9: '3', 10: '2'}
+        if len(num_str) != 18:
+            # raise TypeError(u'请输入标准的第二代身份证号码')
+            return False
+        check_num = 0
+        for index, num in enumerate(num_str):
+            if index == 17:
+                right_code = check_dict.get(check_num % 11)
+                if num == right_code:
+                    # print(u"身份证号: %s 校验通过" % num_str)
+                    return True
+                else:
+                    # print(u"身份证号: %s 校验不通过, 正确尾号应该为：%s" % (num_str, right_code))
+                    return False
+            check_num += str_to_int.get(num) * (2 ** (17 - index) % 11)
+
+    @classmethod
+    def checkIsNull(cls, num_str):
+        res = 0 if pd.isna(num_str) else 1
+        return res
+
+    # def score_verification(row):
+    #     if not 0 <= row.SCORES <= 100:
+    #         print(f'{row.ID}\t{row.NAME}\t{row.SCORES}')
+    #
+    # df = pd.read_excel(io='exls/data_verification.xlsx', sheet_name='Sheet1')
+    # df.apply(score_verification, axis=1)
+
+
+
+
+
+
